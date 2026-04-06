@@ -7,8 +7,8 @@ from collections import defaultdict
 import time
 
 # --- CONFIGURATION ---
-MODEL_PATH = "yolov8n.pt"
-VIDEO_STREAM_URL = "http://192.168.1.6:8080/video"
+MODEL_PATH = "best (7).pt"
+VIDEO_STREAM_URL = r"C:\Users\rohan\Desktop\college\Innovative vii\test3.mp4"
 
 PERSON_CLASS_ID = 0
 ITEM_CLASS_NAMES = ["backpack", "handbag", "suitcase", "laptop", "cell phone"]

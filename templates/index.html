@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surveillance Dashboard | Abandoned Objects</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+        }
+        body { background-color: #f4f7f6; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .navbar { background-color: var(--primary-color); }
+        .card { border: none; border-radius: 10px; }
+        .row-unseen { 
+            font-weight: 700; 
+            background-color: #e8f4fd !important; 
+            border-left: 4px solid #0d6efd;
+        }
+        .video-container {
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .badge-new { font-size: 0.75rem; }
+        #status { font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark shadow-sm mb-4">
+    <div class="container">
+        <span class="navbar-brand mb-0 h1">🛡️ Surveillance AI Dashboard</span>
+        <span id="status" class="text-light opacity-75">Syncing...</span>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <h5 class="card-title mb-3">Filter & Search</h5>
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">General Search</label>
+                    <input type="text" id="searchInput" class="form-control" placeholder="Cam ID or Location...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">Start Time</label>
+                    <input type="datetime-local" id="startTime" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">End Time</label>
+                    <input type="datetime-local" id="endTime" class="form-control">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">Sort Order</label>
+                    <select id="sortOrder" class="form-select">
+                        <option value="desc">Newest First</option>
+                        <option value="asc">Oldest First</option>
+                    </select>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" onclick="clearFilters()" title="Reset Filters">🔄</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th width="100">Status</th>
+                        <th>Camera ID</th>
+                        <th>Location</th>
+                        <th>Timestamp</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody">
+                    </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="videoModal" tabindex="-1" aria-labelledby="videoModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title" id="videoModalLabel">Evidence Clip Preview</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close" onclick="stopVideo()"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="video-container">
+                    <video id="popupPlayer" width="100%" controls>
+                        <source id="videoSource" src="" type="video/mp4">
+                        Your browser does not support HTML5 video.
+                    </video>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <div id="modalMeta" class="small text-muted"></div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" onclick="stopVideo()">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    // Persistence: Keep track of videos the admin has already watched
+    let seenVideos = JSON.parse(localStorage.getItem('seenVideos') || '[]');
+
+    function updateTable() {
+        fetch('/api/data')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('tableBody');
+                const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+                const startVal = document.getElementById('startTime').value;
+                const endVal = document.getElementById('endTime').value;
+                const sortOrder = document.getElementById('sortOrder').value;
+
+                // 1. Sort the data array based on user selection
+                data.sort((a, b) => {
+                    let dateA = new Date(a.timestamp);
+                    let dateB = new Date(b.timestamp);
+                    return sortOrder === 'desc' ? dateB - dateA : dateA - dateB;
+                });
+
+                tbody.innerHTML = '';
+
+                data.forEach(item => {
+                    const itemDate = new Date(item.timestamp);
+                    const isSeen = seenVideos.includes(item.timestamp);
+                    
+                    // 2. Filter Logic
+                    const matchesSearch = item.location.toLowerCase().includes(searchTerm) || 
+                                          item.camera_no.toLowerCase().includes(searchTerm);
+                    
+                    const matchesStart = !startVal || itemDate >= new Date(startVal);
+                    const matchesEnd = !endVal || itemDate <= new Date(endVal);
+
+                    if (matchesSearch && matchesStart && matchesEnd) {
+                        const row = document.createElement('tr');
+                        if (!isSeen) row.className = 'row-unseen';
+
+                        row.innerHTML = `
+                            <td>${!isSeen ? '<span class="badge bg-danger badge-new">NEW</span>' : '<span class="badge bg-light text-muted">Seen</span>'}</td>
+                            <td>${item.camera_no}</td>
+                            <td>${item.location}</td>
+                            <td>${item.timestamp}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-success me-2" 
+                                        onclick="launchLocalPlayer('${item.video_link}', '${item.timestamp}')">
+                                    ▶ Open
+                                </button>
+                                <button class="btn btn-sm btn-danger" 
+                                        onclick="deleteEntry('${item.video_link}')">
+                                    🗑 Delete
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(row);
+                    }
+                });
+                
+                document.getElementById('status').textContent = 'Last Updated: ' + new Date().toLocaleTimeString();
+            })
+            .catch(err => {
+                console.error('Error fetching data:', err);
+                document.getElementById('status').textContent = 'Error Fetching Data';
+            });
+    }
+
+    function viewClip(videoFile, timestamp, location) {
+        // Mark as seen immediately
+        if (!seenVideos.includes(timestamp)) {
+            seenVideos.push(timestamp);
+            localStorage.setItem('seenVideos', JSON.stringify(seenVideos));
+        }
+
+        // Set Video Source and Meta
+        const video = document.getElementById('popupPlayer');
+        const source = document.getElementById('videoSource');
+        document.getElementById('modalMeta').textContent = `${location} | Recorded: ${timestamp}`;
+        
+        source.src = `/abondant_objects_clips/${videoFile}`;
+        video.load();
+        
+        // Show Modal and Play
+        const myModal = new bootstrap.Modal(document.getElementById('videoModal'));
+        myModal.show();
+        video.play();
+        
+        // Update table background immediately
+        updateTable();
+    }
+
+    function stopVideo() {
+        const video = document.getElementById('popupPlayer');
+        video.pause();
+    }
+
+    function clearFilters() {
+        document.getElementById('searchInput').value = '';
+        document.getElementById('startTime').value = '';
+        document.getElementById('endTime').value = '';
+        document.getElementById('sortOrder').value = 'desc';
+        updateTable();
+    }
+    function launchLocalPlayer(videoFile, timestamp) {
+    // 1. Mark as seen in LocalStorage
+        if (!seenVideos.includes(timestamp)) {
+            seenVideos.push(timestamp);
+            localStorage.setItem('seenVideos', JSON.stringify(seenVideos));
+        }
+
+        // 2. Open the video using the Flask route
+        fetch(`/open_video/${videoFile}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "success") {
+                    // 3. Immediately refresh the table to remove the "NEW" tag
+                    updateTable(); 
+                } else {
+                    alert("Error: " + data.message);
+                }
+            })
+            .catch(err => console.error("Error launching player:", err));
+    }
+
+    // Auto-refresh every 20 seconds
+    setInterval(updateTable, 20000);
+
+    // Initial load
+    updateTable();
+
+    // Event listeners for instant filtering
+    ['searchInput', 'startTime', 'endTime', 'sortOrder'].forEach(id => {
+        document.getElementById(id).addEventListener('input', updateTable);
+    });
+
+
+
+    function deleteEntry(videoFile) {
+    if (confirm(`Are you sure you want to delete ${videoFile}? This cannot be undone.`)) {
+        fetch(`/api/delete/${videoFile}`, {
+            method: 'POST',
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === "success") {
+                // Refresh the table immediately after deletion
+                updateTable();
+            } else {
+                alert("Error: " + data.message);
+            }
+        })
+        .catch(err => console.error("Deletion failed:", err));
+    }
+}
+</script>
+
+</body>
+</html>
