@@ -1,3 +1,4 @@
+For maki g this whole file workable do the following concerned task as instructed.
 Install dependencies using requirements.txt
 
 Run 4 separate terminals:
