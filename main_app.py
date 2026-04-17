@@ -12,7 +12,7 @@ CAMERA_ID = "CAM_01"
 LOCATION = "Main Entrance"
 
 # --- Configuration ---
-MODEL_PATH = "yolo11n.pt"
+MODEL_PATH = "yolov8n.pt"
 VIDEO_STREAM_URL = r"C:\Users\rohan\Desktop\college\Innovative vii\test3.mp4"
 ITEM_CLASS_NAMES = ["backpack", "handbag", "suitcase", "laptop", "cell phone"]
 PERSON_CLASS_ID = 0
